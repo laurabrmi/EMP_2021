@@ -293,6 +293,12 @@ k_deploc$MACCOMPID_new <- revalue(k_deploc$MACCOMPID_new,
 levels(k_deploc$MACCOMPID_new)
 plyr::count(k_deploc$MACCOMPID_new)
 
+length(na.omit(k_deploc$MACCOMPID_new))
+
+dw <- svydesign(ids = ~1, data = k_deploc, weights = ~k_deploc$POND_JOUR)
+tab <- svytable(~k_deploc$MACCOMPID_new, dw)
+freq(tab, total = TRUE)
+
 #Motif de déplacement simplifié
 k_deploc$MMOTIFDES_SIMP <- substr(k_deploc$MMOTIFDES,1,2)
 plyr::count(k_deploc$MMOTIFDES_SIMP)
@@ -337,10 +343,14 @@ plyr::count(k_deploc[,c("MVEHEXT")])
 
 
 ## somme du nombre de personnes du ménage ou hors ménage pendant le déplacement 
-sum_accom<- k_deploc$MACCOMPM + k_deploc$MACCOMPHM+1
-plyr::count(sum_accom)
-length(sum_accom)
+
+
+## moyens de transport : laisser les 3 et regrouper les autres 
+
+plyr::count(k_deploc$MMOY1S=="3.1")
+
+length(na.omit(k_deploc$MMOY1S))
 
 dw <- svydesign(ids = ~1, data = k_deploc, weights = ~k_deploc$POND_JOUR)
-tab <- svytable(~sum_accom, dw)
+tab <- svytable(~k_deploc$MMOY1S, dw)
 freq(tab, total = TRUE)
