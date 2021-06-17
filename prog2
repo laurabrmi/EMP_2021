@@ -1,0 +1,346 @@
+#install.packages("sas7bdat")
+#library("sas7bdat")
+install.packages("haven")
+install.packages("data.table")
+install.packages("dplyr")
+install.packages("R.utils")
+install.packages("bit64")
+install.packages("ggplot2")
+install.packages("survey")
+install.packages("questionr")
+library("questionr")
+library("survey")
+library("ggplot2")
+library("haven")
+library("plyr")
+library("data.table")
+library("dplyr")
+library("R.utils")
+library("bit64")
+
+#pour avoir un chiffre décimal 
+#options( "digits"=1,"scipen"=100)
+
+#set working directory
+setwd("L:/Mobilité des personnes/Enquête mobilité/Stage covoiturage/donnees")
+
+#Import de tables puis conversion en CSV
+q_menage <- read_sas("q_menage.sas7bdat")
+fwrite(q_menage,"q_menage.csv.gz")
+q_menage <- fread("q_menage.csv.gz")
+
+k_individu <- read_sas("k_individu.sas7bdat")
+fwrite(k_individu,"k_individu.csv.gz")
+k_individu <- fread("k_individu.csv.gz")
+k_individu
+
+k_deploc <- read_sas("k_deploc.sas7bdat")
+fwrite(k_deploc,"k_deploc.csv.gz")
+k_deploc <- fread("k_deploc.csv.gz")
+k_deploc
+
+
+tcm_ind <- read_sas("tcm_ind.sas7bdat")
+fwrite(tcm_ind,"tcm_ind.csv.gz")
+tcm_ind <- fread("tcm_ind.csv.gz")
+tcm_ind
+
+
+tcm_men <- read_sas("tcm_men.sas7bdat")
+fwrite(tcm_men,"tcm_men.csv.gz")
+tcm_men <- fread("tcm_men.csv.gz")
+tcm_men
+
+#Selection de variables
+q_menage<-subset(q_menage,select=-c(DATENQ)) #on enlève la colonne date de la table q_menage
+
+
+#Fusion des tables
+table_deploc_individu <- merge(k_deploc,tcm_ind,by="IDENT_MEN",all=T)
+table_deploc_individu
+
+table_deplac_ind <- merge(k_deploc,k_individu, by="IDENT_IND", all=T)
+  
+#Moyenne pondérée
+weighted.mean(q_menage$JNBVEH,q_menage$pond_menC) #nombre de voitures possédées par ménage (on pondère)
+weighted.mean(q_menage$JNBVPHS,q_menage$pond_menC,na.rm = T) #na.rm=T on ne prend pas en compte les NA
+
+#Fréquence pondérée
+resultat <- count(k_individu, TRAVAILLE , wt = pond_indC )
+resultat$pct <- resultat$n/sum(resultat$n) #fréquence pondérée des personnes qui travaillent 
+resultat  
+
+#Nombre de valeurs manquantes
+k_individu[k_individu$BTRAVTEL=="","BTRAVTEL"] <- NA
+mean(is.na(k_individu$BTRAVTEL))
+mean(is.na(k_individu[k_individu$TRAVAILLE!="1","BTRAVTEL"]))
+mean(is.na(k_individu[k_individu$TRAVAILLE=="1" & k_individu$BTRAVFIX %in% c("1","2"),"BTRAVTEL"]))
+mean(is.na(k_individu[k_individu$TRAVAILLE=="1" & (k_individu$BTRAVFIX== "1" | k_individu$BTRAVFIX== "2"),"BTRAVTEL"]))
+
+plyr::count(k_individu$BTRAVTEL)
+
+
+
+#moyenne des personnes utilisant le covoiturage pour la mobilité locale 
+#moyenne pondérée
+weighted.mean(k_deploc$MVEHEXT =="2",k_deploc$POND_JOUR)
+#moyenne non pondérée
+mean(k_deploc$MVEHEXT =="2")
+
+
+k_deploc$MVEHTR
+
+
+#moyenne mise en relation avec le conducteur par site internet
+mean(k_deploc$MCOVREL =="1")
+
+
+
+#Fréquence pondérée personne accompgnée pendant déplacement
+#pour regrouper les réponse 1 et 3 
+x <- k_deploc[,c("MACCOMPID")]
+revalue(x, c(MACCOMPID=="3" = 1))
+
+freq <- count(k_deploc, MACCOMPID)
+freq$pct <- freq$n/sum(freq$n)*100 #fréquence pondérée des personnes qui travaillent 
+freq  # 60,9 % ne sont pas accompagnées
+
+mean(k_deploc$MACCOMPID=="1", na.rm=T)
+
+
+weighted.mean(q_menage$JNBVEH, q_menage$pond_menC)
+
+## Camembert 
+ggplot(q_menage[,c("pond_menC","JNBVEH")], 
+       aes(x = "", y = pond_menC, fill = JNBVEH)) +
+  geom_bar(width = 1, stat = "identity", color = "white") +
+  coord_polar("y", start = 0)+
+  theme_void()
+
+q_menage$nb_veh <- as.character(q_menage$JNBVEH)
+q_menage[as.numeric(q_menage$nb_veh)>=4,"nb_veh"] <- "4"
+
+
+ggplot(data = q_menage[,c("pond_menC","JNBVEH")]) + 
+  geom_bar(mapping = aes(x = 1,y=pond_menC,
+                         fill = JNBVEH), position = "fill") +
+  coord_polar(theta = "y") 
+
+
+ggplot(data = q_menage) + 
+  geom_bar(mapping = aes(x = 1,fill = nb_veh), position = "fill")+
+  coord_polar(theta = "y") 
+
+
+
+#histogramme 
+qplot(q_menage$JNBVEH, geom="histogram") 
+
+qplot(freq, geom="histogram")
+
+
+##
+table_deplac_ind$BPERMIS == "1" & table_deplac_ind$MCOVF == "1"
+
+## 15/06/2021
+
+## Fréquence pondérée covoiturage avec contre partie financière 
+plyr::count(k_deploc$MCOVF)
+#27 personnes sont payées
+
+freq_cp_fin <- count(k_deploc, MCOVF =="1" )
+freq_cp_fin
+freq_cp_fin$pct <- freq_cp_fin$n/sum(freq_cp_fin$n) #fréquence pondérée des personnes qui travaillent 
+freq_cp_fin  
+
+# fréquence des personnes mise en relation covoiturage
+plyr::count(k_deploc$MCOVREL)
+
+freq_mise_relation <- count(k_deploc, MCOVREL)
+freq_mise_relation
+freq_mise_relation$pct <- freq_mise_relation$n/sum(freq_mise_relation$n) #fréquence pondérée des personnes qui travaillent 
+freq_mise_relation  
+
+# histogramme du type de véhicule utilisé
+qplot(k_deploc$MVEHEXT, geom="histogram") 
+
+ggplot(k_deploc,aes(x=k_deploc$MVEHEXT)) + geom_histogram() 
+
+# moyenne du nombre de personne du ménage pendant le déplacement 
+mean(k_deploc$MACCOMPM,na.rm = T) #on enlève les NA
+# 1.100882 personne en moyenne lors du déplacement 
+
+#moyenne du nombre de personnes extérieures au ménage pendant le déplacement 
+mean(k_deploc$MACCOMPHM,na.rm = T)
+#0.8967841
+
+#motif du 1er déplacement parmis les gens en covoiturage  
+#k_deploc$MORI1MOTIF&k_deploc$MVEHEXT =="2"
+
+deploc_covoit<-k_deploc[k_deploc$MVEHEXT =="2",]
+tab_freq<-plyr::count(deploc_covoit$MORI1MOTIF)
+tab_freq
+tab_freq$pct<-tab_freq$freq/sum(tab_freq$freq)*100
+tab_freq
+
+plyr::count(k_deploc$MORI1MOTIF)
+# correct pour avoir les pourcentages ? 
+
+#motif de déplacement parmis gens en covoiturage (déplacement en jour de semaine) 
+plyr :: count (deploc_covoit$MMOTIFDES)
+plyr::count(deploc_covoit$MMOTIFDES)$freq/sum(plyr::count(deploc_covoit$MMOTIFDES)$freq)*100
+
+
+#jours où les gens effectuent des déplacements en covoiturage 
+nombre_jour<-plyr::count(deploc_covoit$MJOUR)
+jour<- count(deploc_covoit, MJOUR)
+jour$pct <- jour$n/sum(jour$n)*100 #fréquence pondérée des personnes qui travaillent 
+jour
+nombre_jour$x
+
+## les hist ne marchent pas :(
+ggplot(nombre_jour,aes(x=nombre_jour$x)) + geom_histogram()
+
+qplot(nombre_jour,geom="histogram")
+
+
+## 16/06/2021
+
+#détermination du nombre d'observation par variable
+
+
+#k_deploc[k_deploc$MCOVF =="","MCOVF"] <- NA
+k_deploc$MACCOMPHM       
+length(na.omit(k_deploc$MACCOMPHM))
+
+k_individu[k_individu$BABONNAUTOP =="","BABONNAUTOP"] <- NA
+k_individu$BCARTABON     
+length(na.omit(k_individu$BCARTABON ))
+
+q_menage$JNBVEH
+length(na.omit(q_menage$JNBVEH))
+
+length(tcm_men$NENFANTS )
+
+
+## transformation en majuscule de toutes le colonnes 
+colnames(tcm_ind)<- toupper(colnames(tcm_ind))
+colnames(tcm_men) <- toupper(colnames(tcm_men))
+colnames(k_deploc) <- toupper(colnames(k_deploc))
+colnames(k_individu) <- toupper(colnames(k_individu))
+colnames(q_menage) <- toupper(colnames(q_menage))
+
+# pondération (2 méthodes)- fréquences pondérées des personnes étant accompagnées ou non  
+
+dw <- svydesign(ids = ~1, data = k_deploc, weights = ~k_deploc$POND_JOUR)
+tab <- svytable(~k_deploc$MACCOMPID, dw)
+freq(tab, total = TRUE)
+
+freq_accom<-aggregate(data=k_deploc,k_deploc$POND_JOUR~k_deploc$MACCOMPID,FUN=sum)
+freq_accom$pct<-freq_accom$`k_deploc$POND_JOUR`/sum(freq_accom$`k_deploc$POND_JOUR`)*100
+freq_accom
+
+#frequence pondérée type de véhicule
+freq_transp<-aggregate(data=k_deploc,k_deploc$POND_JOUR~k_deploc$MVEHEXT,FUN=sum)
+freq_transp$pct<-freq_transp$`k_deploc$POND_JOUR`/sum(freq_transp$`k_deploc$POND_JOUR`)*100
+freq_transp
+#8.33 % utilisent le covoiturage 
+
+
+## regrouper des valeurs 
+
+#k_deploc$MACCOMPID <- substr(k_deploc$MACCOMPID,1,3)
+k_deploc$MACCOMPID
+
+
+## 17/06/2021
+
+#pour avoir les effectifs de chaque réponse 
+plyr::count(k_individu$BCARTABON)
+
+length(na.omit(k_individu$BCARTABON))
+
+k_individu$BCARTABON
+
+#on remplace les " " par NA
+k_deploc[k_deploc$MVEHEXT =="","MVEHEXT"] <- NA
+
+
+#moyenne et moyenne pondérée du nombre d'accompagnant
+mean(k_deploc$MACCOMPHM, na.rm=T)
+weighted.mean(k_deploc$MACCOMPHM, k_deploc$POND_JOUR, na.rm=T)
+
+#fréquence pondérée
+dw <- svydesign(ids = ~1, data = k_individu, weights = ~k_individu$POND_INDC)
+tab <- svytable(~k_individu$BCARTABON, dw)
+freq(tab, total = TRUE)
+
+
+a<-aggregate(data=k_individu,k_individu$POND_INDC~k_individu$BABONNAUTOP,FUN=sum)
+a$pct<-a$`k_individu$POND_INDC`/sum(a$`k_individu$POND_INDC`)*100
+a
+
+#Toutes valeurs vides en NA
+#k_deploc[k_deploc==""]<-NA
+
+#Réunion de valeurs 
+k_deploc$MACCOMPID_new <- as.factor(k_deploc$MACCOMPID)
+k_deploc$MACCOMPID_new <- revalue(k_deploc$MACCOMPID_new,c("1"="Oui, avec des personnes différentes",
+                                  "2"="Non","3"="Oui, avec les mêmes personnes"))
+k_deploc$MACCOMPID_new <- revalue(k_deploc$MACCOMPID_new,
+                                  c("Oui, avec des personnes différentes"="Oui",
+                                    "Oui, avec les mêmes personnes"="Oui"))
+levels(k_deploc$MACCOMPID_new)
+plyr::count(k_deploc$MACCOMPID_new)
+
+#Motif de déplacement simplifié
+k_deploc$MMOTIFDES_SIMP <- substr(k_deploc$MMOTIFDES,1,2)
+plyr::count(k_deploc$MMOTIFDES_SIMP)
+
+k_deploc$MMOTIFDES_SIMP_new<- as.factor(k_deploc$MMOTIFDES_SIMP)
+k_deploc$MMOTIFDES_SIMP_new<- revalue (k_deploc$MMOTIFDES_SIMP_new,c("1."="Retour au point de départ", 
+                                                                     "2."="Achats","3."="Soins", "4."="Démarches",
+                                                                     "5."= "Visites", "6."="Acommpagner ou aller chercher",
+                                                                     "7."="Loisirs","8."="Vacances","9."="Motifs professionnels"))
+plyr::count(k_deploc$MMOTIFDES_SIMP_new)
+
+dw <- svydesign(ids = ~1, data = k_deploc, weights = ~k_deploc$POND_JOUR)
+tab <- svytable(~k_deploc$MMOTIFDES_SIMP_new, dw)
+freq(tab, total = TRUE)
+
+#Regroupement variable vehicule
+k_deploc$uti_veh_routier <- with(k_deploc,(MTP >= 2.3 & MTP <= 3.4 & !is.na(MTP))| 
+                                           (MMOY1S >= 2.3 & MMOY1S <= 3.4 & !is.na(MMOY1S)) | 
+                                           (MMOY2S >= 2.3 & MMOY2S <= 3.4 & !is.na(MMOY2S)) |
+                                           (MMOY3S >= 2.3 & MMOY3S <= 3.4 & !is.na(MMOY3S)) | 
+                                           (MMOY4S >= 2.3 & MMOY4S <= 3.4 & !is.na(MMOY4S)))
+#Regroupement des véhicules npossédés par le ménage
+k_deploc$MVEHMEN <- ifelse(k_deploc$MVEH=="99","Véhicule hors ménage","Véhicule possédé par le ménage")
+k_deploc$MVEHMEN <- ifelse(k_deploc$MVEH %in% c("","."),"Pas de véhicule utilisé",k_deploc$MVEHMEN)
+#Regroupement des véhicules non possédés par le ménage
+k_deploc$MVEHEXT2 <- ifelse(k_deploc$MVEHEXT %in% c("ZZ",5:13),
+                            "Autre type de véhicule non possédé par le ménage",k_deploc$MVEHEXT)
+#Nouvelle variable
+k_deploc$MVEHTYP <- ifelse(k_deploc$MVEHMEN=="Véhicule hors ménage",k_deploc$MVEHEXT2,k_deploc$MVEHMEN)
+k_deploc$MVEHTYP <- revalue(as.factor(k_deploc$MVEHTYP),c("1"="Voiture particulière louée","2"="Covoiturage",
+                                                          "3"="Voiture en autopartage","4"="Autre voiture particulière non possédée par le ménage" ))
+
+
+
+plyr::count(k_deploc[,c("MVEHTYP")])
+
+
+str(k_deploc[,c("uti_veh_routier","MVEH","MVEHEXT")])
+plyr::count(k_deploc[,c("uti_veh_routier","MVEH","MVEHEXT")])
+
+plyr::count(k_deploc[,c("MVEHEXT")])
+
+
+## somme du nombre de personnes du ménage ou hors ménage pendant le déplacement 
+sum_accom<- k_deploc$MACCOMPM + k_deploc$MACCOMPHM+1
+plyr::count(sum_accom)
+length(sum_accom)
+
+dw <- svydesign(ids = ~1, data = k_deploc, weights = ~k_deploc$POND_JOUR)
+tab <- svytable(~sum_accom, dw)
+freq(tab, total = TRUE)
